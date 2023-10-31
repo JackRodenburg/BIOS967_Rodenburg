@@ -1,0 +1,8 @@
+"0","#data=africanpenguin.pop \is telling it what data to plot"
+"0","#mapping=aes tells it what to map to which variable this case x is Time and y is N"
+"0","#geom_point() represents data as points"
+"0","#geom_line() connects the points with lines"
+"0","#labs(x=""Time"", y=""Log(Number of Individuals)"") creates labels for x and y axis"
+"0",""
+"0","#SAVING PLOT"
+"0","#ggsave(file=""African_Penguin_Population_Projection_3_11.png"") saves the file"

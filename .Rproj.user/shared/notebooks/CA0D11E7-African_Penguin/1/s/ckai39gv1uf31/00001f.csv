@@ -1,0 +1,5 @@
+"0","#CREATING A TABLE FROM OUR DATA"
+"0","africanpenguin.pop= data.frame(Time=1:SimTime, N=africanpenguin[1:SimTime])"
+"0","#first variable is time, second variable is africanpenguin population"
+"0",""
+"0","ggplot(data=africanpenguin.pop, mapping=aes(x=Time, y=N)) + geom_point() + geom_line() + labs(x= ""Time (years)"", y= ""Number of Individuals"")"

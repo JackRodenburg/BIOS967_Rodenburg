@@ -1,0 +1,8 @@
+"0","#Iterates the population matrix based on our initial population"
+"0","africanpenguin= project(A, africanpenguinvect, time=SimTime) "
+"0","#(matrix, starting pop vector, how many time steps to simulate)"
+"0","#africanpenguin[1:10] would display first 10 iterations of africanpenguin"
+"0",""
+"0","growth_end = africanpenguin[SimTime]/africanpenguin[SimTime-1] "
+"0","growth_beginning = africanpenguin[2]/africanpenguin[1]"
+"0","#we have assumed asymptotic growth rate, therefore these values will be the same (0.96)"

@@ -1,0 +1,2 @@
+"0",""
+"0","ggplot(data=africanpenguin.pop, mapping=aes(x=Time, y=log(N))) + geom_point() + geom_line() + labs(x= ""Time (years)"", y= ""Log(Number of Individuals)"")"
