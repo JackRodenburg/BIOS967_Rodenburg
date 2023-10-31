@@ -14,7 +14,7 @@ View(platte_fish)
 platte_fish
 #cleaning the No Fish, and Net did not Fish from the data (999 and 998)
 platte_fish_cleaned <- platte_fish %>%
-  select(Year, Month, Day, Species, Count) %>% #might add in Size
+  select(Segment, Year, Month, Day, Length, Weight, Species, Count) %>% #might add in Size
   filter(!Species %in% c(999,998))
 
 

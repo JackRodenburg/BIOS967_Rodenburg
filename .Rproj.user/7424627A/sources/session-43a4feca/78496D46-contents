@@ -1,15 +1,21 @@
-library(readxl)
-library(ggplot2)
-library(vegan)
 library(dplyr)
-library(tidyr)
-platte_fish <- read_excel("~/Documents/Biology/Biology Research/Platte River/Platte River fish data.xlsx")
+#platte_fish <- read.csv("/Users/robin/Documents/GitHub/R_Project_2023/BIOS967_Rodenburg/data/Platte_Fish_Data.csv")
 
+library(readr)
+#platte_fish <- read_csv("/Users/robin/Documents/GitHub/R_Project_2023/BIOS967_Rodenburg/data/Platte_Fish_Data.csv")
+
+#^^these didn't work properly
+
+library(readxl)
+platte_fish <- read_excel("~/Documents/Biology/Biology Research/Platte River/Platte River fish data.xlsx")
+View(platte_fish)
+
+
+platte_fish
 #cleaning the No Fish, and Net did not Fish from the data (999 and 998)
 platte_fish_cleaned <- platte_fish %>%
-  select(Segment, Year, Month, Day, Species, Length, Weight, Count) %>%
+  select(Segment, Year, Month, Day, Length, Weight, Species, Count) %>% #might add in Size
   filter(!Species %in% c(999,998))
-#View(platte_fish_cleaned)
 
 
 #separating out all the differet types of sturegeon
@@ -29,12 +35,15 @@ carp <- platte_fish_cleaned %>%
   filter(Species %in% c(176,178,180,181,182))
 
 year_range <- range(platte_fish_cleaned$Year)
+year_range
+
+
 unique_species <- unique(platte_fish$Species)
 unique_months <- unique(platte_fish$Month)
 unique_years <- unique(platte_fish$Year)
 
 
-write.csv(platte_fish_cleaned, "/Users/robin/Documents/GitHub/R_Project_2023/BIOS967_Rodenburg/data/Platte_Fish_Cleaned.csv")
+write.csv(platte_fish_cleaned, "data/Platte_Fish_Cleaned.csv")
 
 
 
