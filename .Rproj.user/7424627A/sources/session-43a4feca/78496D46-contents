@@ -43,7 +43,7 @@ unique_months <- unique(platte_fish$Month)
 unique_years <- unique(platte_fish$Year)
 
 
-write.csv(platte_fish_cleaned, "data/Platte_Fish_Cleaned.csv")
+write.csv(platte_fish_cleaned, "data/Platte_Fish_Cleaned.csv", row.names=F) #removes proname column
 
 
 

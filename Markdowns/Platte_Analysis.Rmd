@@ -1,0 +1,228 @@
+---
+title: "Platte_Analysis"
+output: html_document
+date: "2023-11-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse) #useful functions to make plots
+library(dplyr) 
+library(popdemo) #matrix modeling library
+library(vegan)
+```
+
+This next section will reformat the data in such a way that the vegan program can analyze it.
+  fish_vegan = left column is segment for each day, all other columns are fish species
+  numeric_data = fish_vegan but no left column for each segment per day (this is what vegan package will use to calculate    shannon diversity)
+
+```{r}
+#View(platte_fish_cleaned)
+dat <- read.csv("/Users/robin/Documents/GitHub/R_Project_2023/BIOS967_Rodenburg/data/Platte_Fish_Cleaned.csv")
+
+fish_vegan <- dat %>% select(-X) %>%
+  group_by(Segment, Year, Month, Day, Species) %>%
+  summarise(count_use=sum(Count)) %>%
+  mutate(sample_id=paste(Segment, Year, Month, Day, sep="-")) %>%
+  pivot_wider(id_cols=sample_id, names_from=Species, values_from=count_use)
+
+fish_vegan[is.na(fish_vegan)] <- 0 #converts NA's to 0s
+#View(fish_vegan)
+
+numeric_data <- fish_vegan %>% select(-sample_id) #remove non-integer column
+#numeric_data <- fish_vegan %>% select_if(is.numeric) #also removes any non-integer columns
+```
+
+This section will calculate the shannon diversity for each sample collection (one site per day), then create a histogram 
+
+```{r}
+## CALCULATES THE SHANNON DIVERSITY
+shannon_div <- diversity(numeric_data, index = "shannon")
+
+# Calculate Chao1 using the specpool() function
+chao1_values <- specpool(numeric_data)$Chao1
+
+# If the specpool() function doesn't work, you can alternatively try this:
+# chao1_values <- estimateR(numeric_data)[, "Chao1"]
+
+# Calculate other diversity indices
+diversity_indices <- list(
+  Shannon = diversity(numeric_data, index = "shannon"),
+  Simpson = diversity(numeric_data, index = "simpson"),
+  InverseSimpson = diversity(numeric_data, index = "invsimpson"),
+  FisherAlpha = specnumber(numeric_data) - 1,
+  Richness = specnumber(numeric_data),
+  Evenness = diversity(numeric_data, index = "shannon") / log(specnumber(numeric_data))
+)
+
+# Add Chao1 to the list
+diversity_indices$Chao1 <- chao1_values
+
+# Convert the list to a dataframe
+diversity_data <- as.data.frame(do.call(cbind, diversity_indices))
+
+# View the results
+print(diversity_data)
+
+
+
+
+#PLOTTING A HISTOGRAM OF ALL SHANNON DIVERSITY NUMBERS IN shannon_div
+ggplot(data.frame(Shannon_Diversity = shannon_div), aes(x = Shannon_Diversity)) +
+  geom_histogram(binwidth = 0.1, fill = "dodgerblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Shannon Diversity", x = "Shannon Diversity", y = "Number of Samples")
+```
+
+
+```{r}
+#pairs shannon diversity index with sample id
+shannon_data <- data.frame(sample_id = fish_vegan$sample_id, Shannon_Diversity = shannon_div)
+
+#creates separate columns with segment and date as separate columns
+shannon_data_extend <- shannon_data %>%
+  separate(sample_id, into = c("Segment", "Year", "Month", "Day"), sep = "-") %>%
+  filter(Segment != "NA") %>% 
+  mutate(Segment = factor(Segment, levels = c("CP", "ULP", "ELK", "LLP", "PMC"))) %>% 
+  mutate(Date = as.Date(paste(Year, Month, Day, sep = "-"), format = "%Y-%m-%d"))
+
+#Calculates each unique shannon diversity for each time point
+shannon_avg_time <- shannon_data_extend %>%
+  group_by(Date) %>%
+  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity))
+
+#shannon_avg_time
+
+ggplot(shannon_avg_time, aes(x = Date, y = Avg_Shannon_Diversity)) +
+  geom_line(color = "black") +
+  #geom_point(color = "blue") +
+  labs(title = "Shannon Diversity Over Time",
+       x = "Date",
+       y = "Average Shannon Diversity") +
+  theme_minimal()
+```
+
+This chunk smooths out ths above data, average shannon diveristy across months instead of sample periods
+```{r}
+# Calculate the average Shannon diversity for each month
+shannon_avg_monthly <- shannon_data_extend %>%
+  group_by(Year, Month) %>%
+  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity)) %>%
+  ungroup() %>%
+  mutate(Month = as.numeric(Month),
+         YearMonth = as.Date(paste(Year, Month, "01", sep = "-"), format="%Y-%m-%d")) %>%
+  arrange(Year, Month)
+
+# Plot the average Shannon diversity for each month, with only years on the x-axis
+ggplot(shannon_avg_monthly, aes(x = YearMonth, y = Avg_Shannon_Diversity)) +
+  geom_line() +  # Add lines connecting the points
+  geom_point(aes(color = Year)) +  # Points colored by year
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +  # Format x-axis labels to show only years
+  labs(title = "Average Monthly Shannon Diversity Over Years",
+       x = "Year",
+       y = "Average Shannon Diversity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1))  # Rotate x-axis labels for readability
+```
+
+
+This chunk calculates the average shannon diversity for each location across years 
+```{r}
+#calculates each shannon diversity for each unique location
+shannon_avg_location <- shannon_data_extend %>%
+  group_by(Segment) %>%
+  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity))
+
+#plots Shannon diversity for each location
+ggplot(shannon_avg_location, aes(x = Segment, y = Avg_Shannon_Diversity)) +
+  geom_line(color = "black") +
+  geom_point(color = "blue") +
+  labs(title = "Shannon Diversity Across Locations",
+       x = "Segment",
+       y = "Average Shannon Diversity") +
+  theme_minimal()
+```
+
+This chunk finds the maximum Shannon diversity experienced by each place
+#i want to place a label on each data point indicating the month,year max diversity was acheived#
+
+```{r}
+# Prepare the data with Year and Shannon Diversity
+shannon_yearly_max <- shannon_data_extend %>%
+  group_by(Year) %>%
+  summarize(Max_Shannon_Diversity = max(Shannon_Diversity)) %>%
+  ungroup()  # to remove the grouping
+
+shannon_yearly_max
+
+# Plot the data
+ggplot(shannon_yearly_max, aes(x = as.numeric(Year), y = Max_Shannon_Diversity)) +
+  geom_line(group = 1, color = "blue") +  # Line plot
+  geom_point(color = "red") +  # Add points
+  #scale_x_continuous(breaks = scales::pretty_breaks(n = 10), minor_breaks = NULL) +  # Pretty breaks for years
+  labs(title = "Maximum Shannon Diversity Per Year",
+       x = "Year",
+       y = "Maximum Shannon Diversity") +
+  theme_minimal()
+```
+
+This chunk calculates the average Shannon Diversity each year
+```{r}
+# Prepare the data with Year and Shannon Diversity
+shannon_yearly_avg <- shannon_data_extend %>%
+  group_by(Year) %>%
+  summarize(Average_Shannon_Diversity = mean(Shannon_Diversity)) %>%
+  ungroup()  # to remove the grouping
+
+shannon_yearly_avg
+
+# Plot the data
+ggplot(shannon_yearly_avg, aes(x = as.numeric(Year), y = Average_Shannon_Diversity)) +
+  geom_line(group = 1, color = "blue") +  # Line plot
+  geom_point(color = "red") +  # Add points
+  #scale_x_continuous(breaks = scales::pretty_breaks(n = 10), minor_breaks = NULL) +  # Pretty breaks for years
+  labs(title = "Average Shannon Diversity Per Year",
+       x = "Year",
+       y = "Average Shannon Diversity") +
+  theme_minimal()
+```
+
+```{r}
+# Prepare the data with Year and Shannon Diversity
+shannon_yearly_med <- shannon_data_extend %>%
+  group_by(Year) %>%
+  summarize(Median_Shannon_Diversity = median(Shannon_Diversity)) %>%
+  ungroup()  # to remove the grouping
+
+shannon_yearly_med
+
+# Plot the data
+ggplot(shannon_yearly_med, aes(x = as.numeric(Year), y = Median_Shannon_Diversity)) +
+  geom_line(group = 1, color = "blue") +  # Line plot
+  geom_point(color = "red") +  # Add points
+  #scale_x_continuous(breaks = scales::pretty_breaks(n = 10), minor_breaks = NULL) +  # Pretty breaks for years
+  labs(title = "Median Shannon Diversity Per Year",
+       x = "Year",
+       y = "Median Shannon Diversity") +
+  theme_minimal()
+```
+
+```{r}
+#Prepare the data by grouping by Segment and Year
+shannon_location_year <- shannon_data_extend %>%
+  group_by(Segment, Year) %>%
+  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity)) %>%
+  ungroup()  # Ungroup to avoid issues in further manipulation
+
+#Plot
+ggplot(shannon_location_year, aes(x = Segment, y = Avg_Shannon_Diversity, group = Year, color = as.factor(Year))) +
+  geom_line() +  # Add lines
+  geom_point(aes(shape = as.factor(Year))) +  # Add points and use different shapes for each year
+  scale_color_manual(values = rainbow(length(unique(shannon_location_year$Year)))) +  # Set manual colors if desired
+  labs(title = "Average Shannon Diversity Across Locations by Year",
+       x = "Location (Segment)",
+       y = "Average Shannon Diversity") +
+  theme_minimal() +
+  theme(legend.title = element_blank())  # Hide the legend title if you wish
+```
+
+
