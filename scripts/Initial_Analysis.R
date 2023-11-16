@@ -8,15 +8,45 @@ library(readr)
 
 library(readxl)
 platte_fish <- read_excel("~/Documents/Biology/Biology Research/Platte River/Platte River fish data.xlsx")
-View(platte_fish)
 
 
-platte_fish
 #cleaning the No Fish, and Net did not Fish from the data (999 and 998)
 platte_fish_cleaned <- platte_fish %>%
   select(Segment, Year, Month, Day, Length, Weight, Species, Count) %>% #might add in Size
-  filter(!Species %in% c(999,998))
+  filter(!Species %in% c(999,998,997,NA)) %>%
+  mutate(Count = as.numeric(as.character(Count)))
 
+
+platte_fish_extended <- platte_fish_cleaned %>%
+  mutate(
+    Origin = case_when(
+      Species %in% c(176, 178, 180, 181, 182) ~ "Non",  # Assign "Non" to the specified species codes
+      TRUE ~ "Nat"  # Assign "Nat" to all other species
+    )
+  )
+
+LLP_fish <- platte_fish_extended %>%
+  filter(Segment == "LLP")
+
+CP_fish <- platte_fish_extended %>%
+  filter(Segment == "CP")
+
+ULP_fish <- platte_fish_extended %>%
+  filter(Segment == "ULP")
+
+ELK_fish <- platte_fish_extended %>%
+  filter(Segment == "ELK")
+
+PMC_fish <- platte_fish_extended %>%
+  filter(Segment == "PMC")
+
+# Creating the dataset for native fish
+native_fish <- platte_fish_extended %>%
+  filter(Origin == "Nat")
+
+# Creating the dataset for non-native fish
+nonnative_fish <- platte_fish_extended %>%
+  filter(Origin == "Non")
 
 #separating out all the differet types of sturegeon
 sturgeon <- platte_fish_cleaned %>%
@@ -33,6 +63,8 @@ catfish <- platte_fish_cleaned %>%
 #separates just the invasive carp (grass carp 176, common carp 178, silver carp 180, "Unidentified Asian Carp" 181, Bidhead carp 182)
 carp <- platte_fish_cleaned %>%
   filter(Species %in% c(176,178,180,181,182))
+
+
 
 year_range <- range(platte_fish_cleaned$Year)
 year_range
