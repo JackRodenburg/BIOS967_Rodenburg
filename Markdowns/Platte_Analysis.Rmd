@@ -13,6 +13,8 @@ library(vegan)
 library(lubridate)
 library(tidyr)
 library(scales)
+library(reshape2)
+library(dataRetrieval)
 ```
 
 # 1. Initial Analysis- creates fish_vegan and numeric_data
@@ -36,16 +38,38 @@ fish_vegan[is.na(fish_vegan)] <- 0 #converts NA's to 0s
 
 numeric_data <- fish_vegan %>% select(-sample_id) #remove non-integer column
 #numeric_data <- fish_vegan %>% select_if(is.numeric) #also removes any non-integer columns
+print(fish_vegan)
+
+native_fish_vegan <- native_fish %>% 
+  group_by(Segment, Year, Month, Day, Species) %>%
+  summarise(count_use=sum(Count)) %>%
+  mutate(sample_id=paste(Segment, Year, Month, Day, sep="-")) %>%
+  pivot_wider(id_cols=sample_id, names_from=Species, values_from=count_use)
+
+nonnative_fish_vegan <- nonnative_fish %>% 
+  group_by(Segment, Year, Month, Day, Species) %>%
+  summarise(count_use=sum(Count)) %>%
+  mutate(sample_id=paste(Segment, Year, Month, Day, sep="-")) %>%
+  pivot_wider(id_cols=sample_id, names_from=Species, values_from=count_use)
+
+native_fish_vegan[is.na(native_fish_vegan)] <- 0 #converts NA's to 0s
+nonnative_fish_vegan[is.na(nonnative_fish_vegan)] <- 0 #converts NA's to 0s
+
+native_numeric_data <- native_fish_vegan %>% select(-sample_id) #remove non-integer column
+nonnative_numeric_data <- nonnative_fish_vegan %>% select(-sample_id) #remove non-integer column
+
+print(nonnative_fish_vegan)
+print(nonnative_numeric_data)
+#numeric_data <- fish_vegan %>% select_if(is.numeric) #also removes any non-integer columns
 ```
 
 #2 Shannon diversity calculation for each sample collection (one site per day), then create a histogram 
 
 ```{r}
-## CALCULATES THE SHANNON DIVERSITY
-shannon_div <- diversity(numeric_data, index = "shannon")
-
 # Calculate Chao1 using the specpool() function
 chao1_values <- specpool(numeric_data)$Chao1
+native_chao1_values <- specpool(native_numeric_data)$Chao1
+nonnative_chao1_values <- specpool(nonnative_numeric_data)$Chao1
 
 # If the specpool() function doesn't work, you can alternatively try this:
 # chao1_values <- estimateR(numeric_data)[, "Chao1"]
@@ -60,11 +84,34 @@ diversity_indices <- list(
   Evenness = diversity(numeric_data, index = "shannon") / log(specnumber(numeric_data))
 )
 
+native_diversity_indices <- list(
+  Shannon = diversity(native_numeric_data, index = "shannon"),
+  Simpson = diversity(native_numeric_data, index = "simpson"),
+  InverseSimpson = diversity(native_numeric_data, index = "invsimpson"),
+  FisherAlpha = specnumber(native_numeric_data) - 1,
+  Richness = specnumber(native_numeric_data),
+  Evenness = diversity(native_numeric_data, index = "shannon") / log(specnumber(native_numeric_data))
+)
+
+
+nonnative_diversity_indices <- list(
+  Shannon = diversity(nonnative_numeric_data, index = "shannon"),
+  Simpson = diversity(nonnative_numeric_data, index = "simpson"),
+  InverseSimpson = diversity(nonnative_numeric_data, index = "invsimpson"),
+  FisherAlpha = specnumber(nonnative_numeric_data) - 1,
+  Richness = specnumber(nonnative_numeric_data),
+  Evenness = diversity(nonnative_numeric_data, index = "shannon") / log(specnumber(nonnative_numeric_data))
+)
 # Add Chao1 to the list
 diversity_indices$Chao1 <- chao1_values
+native_diversity_indices$Chao1 <- chao1_values
+nonnative_diversity_indices$Chao1 <- chao1_values
 
 # Convert the list to a dataframe
 diversity_data <- as.data.frame(do.call(cbind, diversity_indices))
+native_diversity_data <- as.data.frame(do.call(cbind, native_diversity_indices))
+nonnative_diversity_data <- as.data.frame(do.call(cbind, nonnative_diversity_indices))
+
 ```
 
 
@@ -75,35 +122,59 @@ diversity_data_extend <- cbind(diversity_data, sample_id = fish_vegan$sample_id)
   mutate(Segment = factor(Segment, levels = c("CP", "ULP", "ELK", "LLP", "PMC"))) %>% 
   mutate(Date = as.Date(paste(Year, Month, Day, sep = "-"), format = "%Y-%m-%d")) %>% 
   select(-Year, -Month, -Day)
+
+native_diversity_data_extend <- cbind(native_diversity_data, sample_id = native_fish_vegan$sample_id) %>% 
+  separate(sample_id, into = c("Segment", "Year", "Month", "Day"), sep = "-") %>%
+  filter(Segment != "NA") %>% 
+  mutate(Segment = factor(Segment, levels = c("CP", "ULP", "ELK", "LLP", "PMC"))) %>% 
+  mutate(Date = as.Date(paste(Year, Month, Day, sep = "-"), format = "%Y-%m-%d")) %>% 
+  select(-Year, -Month, -Day)
+
+nonnative_diversity_data_extend <- cbind(nonnative_diversity_data, sample_id = nonnative_fish_vegan$sample_id) %>% 
+  separate(sample_id, into = c("Segment", "Year", "Month", "Day"), sep = "-") %>%
+  filter(Segment != "NA") %>% 
+  mutate(Segment = factor(Segment, levels = c("CP", "ULP", "ELK", "LLP", "PMC"))) %>% 
+  mutate(Date = as.Date(paste(Year, Month, Day, sep = "-"), format = "%Y-%m-%d")) %>% 
+  select(-Year, -Month, -Day)
 # View the results
 
 #creates a new variable that bunches the samples by season. 
 diversity_data_extend <- diversity_data_extend %>%
   arrange(Date) %>%
-  mutate(SeasonGroup = cumsum(c(TRUE, diff(Date) > 40))) # assuming a break of more than 90 days indicates a new season
+  mutate(SeasonGroup = cumsum(c(TRUE, diff(Date) > 90))) # assuming a break of more than 90 days indicates a new season
+
+#creates a new variable that bunches the samples by season. 
+native_diversity_data_extend <- native_diversity_data_extend %>%
+  arrange(Date) %>%
+  mutate(SeasonGroup = cumsum(c(TRUE, diff(Date) > 90))) # assuming a break of more than 90 days indicates a new season
+
+#creates a new variable that bunches the samples by season. 
+nonnative_diversity_data_extend <- nonnative_diversity_data_extend %>%
+  arrange(Date) %>%
+  mutate(SeasonGroup = cumsum(c(TRUE, diff(Date) > 90))) # assuming a break of more than 90 days indicates a new season
 
 diversity_data_extend <- diversity_data_extend %>%
   mutate(
     Season = case_when(
-      Date >= as.Date(paste(year(Date), "01-01", sep = "-")) & Date <= as.Date(paste(year(Date), "05-01", sep = "-")) ~ "Spring",
-      Date >= as.Date(paste(year(Date), "05-02", sep = "-")) & Date <= as.Date(paste(year(Date), "07-31", sep = "-")) ~ "Summer",
+      Date >= as.Date(paste(year(Date), "01-01", sep = "-")) & Date <= as.Date(paste(year(Date), "04-30", sep = "-")) ~ "Spring",
+      Date >= as.Date(paste(year(Date), "05-01", sep = "-")) & Date <= as.Date(paste(year(Date), "07-31", sep = "-")) ~ "Summer",
       Date >= as.Date(paste(year(Date), "08-01", sep = "-")) & Date <= as.Date(paste(year(Date), "12-31", sep = "-")) ~ "Fall",
-      TRUE ~ NA_character_ # Assigns NA to any dates that don't fit the above criteria
+      #TRUE ~ NA_character_ # Assigns NA to any dates that don't fit the above criteria
     )
   )
 
 diversity_data_extend <- diversity_data_extend %>%
   mutate(
     Subcategory = case_when(
-      Season == "Spring" & month(Date) %in% c(01, 02, 03) ~ "Early",
-      Season == "Spring" & month(Date) == 04 ~ "Middle",
-      Season == "Spring" & month(Date) == 05 ~ "Late",
-      Season == "Summer" & month(Date) == 06 ~ "Early",
-      Season == "Summer" & month(Date) == 07 ~ "Middle",
-      Season == "Summer" & month(Date) == 08 ~ "Late",
-      Season == "Fall" & month(Date) == 09 ~ "Early",
-      Season == "Fall" & month(Date) == 10 ~ "Middle",
-      Season == "Fall" & month(Date) == 11 ~ "Late",
+      Season == "Spring" & month(Date) %in% c(01, 02) ~ "Early",
+      Season == "Spring" & month(Date) == 03 ~ "Middle",
+      Season == "Spring" & month(Date) == 04 ~ "Late",
+      Season == "Summer" & month(Date) == 05 ~ "Early",
+      Season == "Summer" & month(Date) == 06 ~ "Middle",
+      Season == "Summer" & month(Date) == 07 ~ "Late",
+      Season == "Fall" & month(Date) == 08 ~ "Early",
+      Season == "Fall" & month(Date) == 09 ~ "Middle",
+      Season == "Fall" & month(Date) %in% c(10, 11, 12) ~ "Late",
       TRUE ~ NA_character_
     )
   )
@@ -112,34 +183,117 @@ diversity_data_extend <- diversity_data_extend %>%
 print(diversity_data_extend)
 
 #PLOTTING A HISTOGRAM OF ALL SHANNON DIVERSITY NUMBERS IN shannon_div
-ggplot(data.frame(Shannon_Diversity = shannon_div), aes(x = Shannon_Diversity)) +
+ggplot(data.frame(Shannon_Diversity = diversity_data_extend$Shannon), aes(x = Shannon_Diversity)) +
   geom_histogram(binwidth = 0.1, fill = "dodgerblue", color = "black", alpha = 0.7) +
   labs(title = "Distribution of Shannon Diversity", x = "Shannon Diversity", y = "Number of Samples")
 ```
 This plots the 
 
 ```{r}
+# Filter data for the desired time range (2010-2014)
 filtered_data <- diversity_data_extend %>%
-  filter(Date >= "2010-01-01" & Date <= "2015-12-31")
+  filter(Date >= "2007-01-01" & Date <= "2017-12-31")
 
 diversity_plot <- ggplot(filtered_data, aes(x = Date, group = SeasonGroup)) +
-  geom_line(aes(y = Shannon, color = "Shannon")) +
-  geom_line(aes(y = Richness/10, color = "Richness")) +
-  geom_line(aes(y = Simpson, color = "Simpson")) +
+  geom_smooth(aes(y = Shannon, color = "Shannon")) +
+  geom_smooth(aes(y = Richness/10, color = "Richness (scaled)")) +
+  geom_smooth(aes(y = Simpson, color = "Simpson")) +
   labs(x = "Year", y = "Diversity") +
   ggtitle("Diversity Indeces Over Time")
 
 # Print the plot
 print(diversity_plot)
 
-# Filter data for the desired time range (2010-2014)
-
-
-
 
 # Print the plot
 #nlkprint(diversity_plot)
 ```
+Okay, now Kate brilliantly suggested that I should plot this^ and then just the diversity indeces of native species...!! OO good idea, here it goes:
+
+```{r}
+#first I have to find the diversity data for just native species!
+
+native_filtered_data <- native_diversity_data_extend %>%
+  filter(Date >= "2007-01-01" & Date <= "2017-12-31")
+
+nonnative_filtered_data <- nonnative_diversity_data_extend %>%
+  filter(Date >= "2007-01-01" & Date <= "2017-12-31")
+
+native_diversity_plot <- ggplot(native_filtered_data, aes(x = Date, group = SeasonGroup)) +
+  geom_smooth(aes(y = Shannon, color = "Shannon")) +
+  geom_smooth(aes(y = Richness/10, color = "Richness (scaled)")) +
+  geom_smooth(aes(y = Simpson, color = "Simpson")) +
+  labs(x = "Year", y = "Diversity") +
+  ggtitle("Native Diversity Indeces Over Time")
+
+# Print the plot
+print(native_diversity_plot)
+```
+```{r}
+all_fish_data <- filtered_data %>%
+  select(Date, Shannon) %>%
+  mutate(Type = "All Fish")
+
+native_fish_data <- native_filtered_data %>%
+  select(Date, Shannon) %>%
+  mutate(Type = "Native Fish")
+
+nonnative_fish_data <- nonnative_filtered_data %>%
+  select(Date, Shannon) %>%
+  mutate(Type = "Nonnative Fish")
+
+combined_data <- rbind(all_fish_data, native_fish_data, nonnative_fish_data)
+
+combined_diversity_plot <- ggplot(combined_data, aes(x = Date, y = Shannon, color = Type, group = Type)) +
+  geom_smooth() +
+  labs(x = "Year", y = "Shannon Diversity", color = "Type") +
+  ggtitle("Shannon Diversity Over Time for All Fish vs. Native Fish")
+
+# Print the plot
+print(combined_diversity_plot)
+
+```
+```{r}
+# Calculate the average body length by year for all fish
+average_length_yearly_all <- platte_fish_extended %>%
+  group_by(Year) %>%
+  summarize(AverageLength = mean(Length, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the average body length across time for all fish
+ggplot(average_length_yearly_all, aes(x = Year, y = AverageLength)) +
+  geom_smooth() +  # Line plot
+  geom_point() +  # Points for each year
+  labs(title = "Average Body Length Over Time (All Fish)",
+       x = "Year",
+       y = "Average Body Length") +
+  theme_minimal()
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Calculate the average body length by year for native and nonnative fish
+average_length_yearly_grouped <- platte_fish_extended %>%
+  group_by(Year, Origin) %>%
+  summarize(AverageLength = mean(Length, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the average body length across time for native and nonnative fish
+ggplot(average_length_yearly_grouped, aes(x = Year, y = AverageLength, color = Origin)) +
+  geom_smooth() +  # Line plot
+  geom_point() +  # Points for each year
+  scale_x_continuous(breaks = unique(average_length_yearly_grouped$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Average Body Length Over Time by Fish Type",
+       x = "Year",
+       y = "Average Body Length",
+       color = "Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+```
+
+
 # Calculates all the Monthly Averages
 ```{r}
 monthly_avg_shannon <- diversity_data_extend %>%
@@ -164,25 +318,27 @@ monthly_avg_evenness <- diversity_data_extend %>%
 ```
 
 ```{r}
-yearly_avg_diversity <- diversity_data_extend %>%
-  mutate(Year = year(Date)) %>%  # Extracts the year from the Date
-  group_by(Year, Season, Subcategory) %>%
-  summarise(AvgShannon = mean(Shannon, na.rm = TRUE))
+#yearly_avg_diversity <- diversity_data_extend %>%
+  #mutate(Year = year(Date)) %>%  # Extracts the year from the Date
+ # group_by(Year, Season, Subcategory) %>%
+  #summarise(AvgShannon = mean(Shannon, na.rm = TRUE))
 
-plot <- ggplot(yearly_avg_diversity, aes(x = Year, y = AvgShannon, color = Subcategory)) +
-  geom_point() +  # You can use geom_line() if you prefer to connect the points
-  geom_smooth(method = "loess", se = FALSE) +  # Adds a smoothed line through the points
-  labs(x = "Year", y = "Average Shannon Diversity", title = "Yearly Average Shannon Diversity by Subcategory") +
-  theme_minimal()
+#plot <- ggplot(yearly_avg_diversity, aes(x = Year, y = AvgShannon, color = Subcategory)) +
+  #geom_point() +  # You can use geom_line() if you prefer to connect the points
+ # geom_smooth(method = "loess", se = FALSE) +  # Adds a smoothed line through the points
+  #labs(x = "Year", y = "Average Shannon Diversity", title = "Yearly Average Shannon Diversity by Subcategory") +
+ # theme_minimal()
 
-print(plot)
+#print(plot)
 
+filtered_data_extra <- diversity_data_extend %>%
+  filter(Date >= "2012-01-01" & Date <= "2013-01-01")
 
-diversity_plot <- ggplot(filtered_data, aes(x = Date, group = SeasonGroup)) +
-  geom_line(aes(y = Shannon, color = Season)) +  # Color by Season
+diversity_plot <- ggplot(filtered_data_extra, aes(x = Date, group = SeasonGroup)) +
+  geom_smooth(aes(y = Shannon, color = Season)) +  # Color by Season
   scale_color_manual(values = c("Spring" = "green4", "Summer" = "yellow4", "Fall" = "brown4")) +
-  labs(x = "Year", y = "Diversity", color = "Season") +
-  ggtitle("Diversity Indices Over Time") +
+  labs(x = "2012", y = "Diversity", color = "Season") +
+  ggtitle("Shannon Diveristy Indices in 2012") +
   theme_minimal()
 
 print(diversity_plot)
@@ -193,7 +349,7 @@ filtered_data_segment <- diversity_data_extend %>%
 
 segment_plot <- ggplot(filtered_data_segment, aes(x = Date, y = Shannon, group = interaction(SeasonGroup, Segment), color = Segment)) +
   geom_point() +
-  geom_line() +
+  geom_smooth() +
   labs(x = "Date", y = "Shannon Diversity", color = "Segment") +
   ggtitle("Shannon Diversity by Segment and SeasonGroup Over Time") +
   theme_minimal()
@@ -204,343 +360,8 @@ print(segment_plot)
 ```
 
 
-#```{r}
-# Assuming you have a 'Year' or 'Date' column in shannon_data_extend that corresponds to each row in diversity_data
-diversity_data#$Time <- shannon_data_extend$Year  # Replace 'Year' with 'Date' or the appropriate time column
-
-# Reshape the data to long format
-long_diversity_data <- gather(diversity_data, "Index", "Value", -Time)
-
-# Plotting each diversity index as a separate line
-ggplot(long_diversity_data, aes(x = Time, y = Value, color = Index)) +
-  geom_line() +
-  labs(title = "Diversity Indices Over Time",
-       x = "Time",
-       y = "Index Value") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
-#```
 
 
-#```{r}
-#pairs shannon diversity index with sample id
-shannon_data <- data.frame(sample_id = fish_vegan$sample_id, Shannon_Diversity = shannon_div)
-
-#creates separate columns with segment and date as separate columns
-shannon_data_extend <- shannon_data %>%
-  separate(sample_id, into = c("Segment", "Year", "Month", "Day"), sep = "-") %>%
-  filter(Segment != "NA") %>% 
-  mutate(Segment = factor(Segment, levels = c("CP", "ULP", "ELK", "LLP", "PMC"))) %>% 
-  mutate(Date = as.Date(paste(Year, Month, Day, sep = "-"), format = "%Y-%m-%d"))
-
-#Calculates each unique shannon diversity for each time point
-shannon_avg_time <- shannon_data_extend %>%
-  group_by(Date) %>%
-  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity))
-
-#shannon_avg_time
-
-ggplot(shannon_avg_time, aes(x = Date, y = Avg_Shannon_Diversity)) +
-  geom_line(color = "black") +
-  #geom_point(color = "blue") +
-  labs(title = "Shannon Diversity Over Time",
-       x = "Date",
-       y = "Average Shannon Diversity") +
-  theme_minimal()
-
-diversity_data_extend
-#```
-
-This chunk smooths out ths above data, average shannon diveristy across months instead of sample periods
-
-```{r}
-# Calculate the average Shannon diversity for each month
-shannon_avg_monthly <- shannon_data_extend %>%
-  group_by(Year, Month) %>%
-  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity)) %>%
-  ungroup() %>%
-  mutate(Month = as.numeric(Month),
-         YearMonth = as.Date(paste(Year, Month, "01", sep = "-"), format="%Y-%m-%d")) %>%
-  arrange(Year, Month)
-
-# Plot the average Shannon diversity for each month, with only years on the x-axis
-ggplot(shannon_avg_monthly, aes(x = YearMonth, y = Avg_Shannon_Diversity)) +
-  geom_line() +  # Add lines connecting the points
-  geom_point(aes(color = Year)) +  # Points colored by year
-  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +  # Format x-axis labels to show only years
-  labs(title = "Average Monthly Shannon Diversity Over Years",
-       x = "Year",
-       y = "Average Shannon Diversity") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 0, hjust = 1))  # Rotate x-axis labels for readability
-```
-This chunk calculates Shannon diverisity for each half year
-
-```{r}
-# Calculate the average Shannon diversity for each half-year
-shannon_avg_halfyearly <- shannon_data_extend %>%
-  mutate(Half = ifelse(Month %in% 1:6, "H1", "H2"),
-         YearHalf = paste(Year, Half, sep = "-")) %>%
-  group_by(Year, Half, YearHalf) %>%
-  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity), .groups = 'drop') %>%
-  mutate(YearHalfDate = as.Date(paste(Year, ifelse(Half == "H1", "06", "12"), "30", sep = "-"))) %>%
-  arrange(YearHalfDate)  # Ensure correct ordering for plotting lines
-
-# Plot the average Shannon diversity for each half-year, connecting all points
-ggplot(shannon_avg_halfyearly, aes(x = YearHalfDate, y = Avg_Shannon_Diversity)) +
-  geom_line() +  # Connect all points with lines
-  geom_point(aes(color = as.factor(Year))) +  # Points colored by year
-  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +  # Format x-axis labels to show only years
-  labs(title = "Average Half-Yearly Shannon Diversity Over Years",
-       x = "Year",
-       y = "Average Shannon Diversity") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))  # Rotate x-axis labels for readability
-
-# Execute the plot
-print(shannon_avg_halfyearly)
-```
-
-This chunk calculates average shannon diversity for each year
-```{r}
-# Ensure Year is treated as numeric for the plotting
-shannon_avg_yearly <- shannon_data_extend %>%
-  mutate(Year = as.numeric(as.character(Year))) %>%
-  group_by(Year) %>%
-  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity), .groups = 'drop')
-
-# Define the breaks for the x-axis
-year_breaks <- shannon_avg_yearly$Year
-
-# Plot the average Shannon diversity for each year with connected lines
-ggplot(shannon_avg_yearly, aes(x = Year, y = Avg_Shannon_Diversity)) +
-  geom_line() +  # Connect points with lines
-  geom_point() +
-  #geom_point(aes(color = as.factor(Year))) +  # Points colored by year
-  scale_x_continuous(breaks = year_breaks) +  # Set x-axis breaks to show each year
-  labs(title = "Average Yearly Shannon Diversity Over Years",
-       x = "Year",
-       y = "Average Shannon Diversity") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))  # Rotate x-axis labels for readability
-```
-
-
-
-This chunk calculates the average shannon diversity for each location across years 
-```{r}
-#calculates each shannon diversity for each unique location
-shannon_avg_location <- shannon_data_extend %>%
-  group_by(Segment) %>%
-  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity))
-
-#plots Shannon diversity for each location
-ggplot(shannon_avg_location, aes(x = Segment, y = Avg_Shannon_Diversity)) +
-  geom_line(color = "black") +
-  geom_point(color = "blue") +
-  labs(title = "Shannon Diversity Across Locations",
-       x = "Segment",
-       y = "Average Shannon Diversity") +
-  theme_minimal()
-```
-
-This chunk finds the maximum Shannon diversity experienced by each place
-#i want to place a label on each data point indicating the month,year max diversity was acheived#
-
-```{r}
-# Prepare the data with Year and Shannon Diversity
-shannon_yearly_max <- shannon_data_extend %>%
-  mutate(Year = as.numeric(as.character(Year))) %>%
-  group_by(Year) %>%
-  summarize(Max_Shannon_Diversity = max(Shannon_Diversity)) %>%
-  ungroup()  #to remove the grouping
-
-shannon_yearly_max
-year_breaks <- shannon_avg_yearly$Year
-
-
-# Plot the data
-ggplot(shannon_yearly_max, aes(x = as.numeric(Year), y = Max_Shannon_Diversity)) +
-  geom_line(group = 1, color = "blue") +  # Line plot
-  geom_point(color = "red") +  # Add points
-  scale_x_continuous(breaks = year_breaks) +
-  #scale_x_continuous(breaks = scales::pretty_breaks(n = 10), minor_breaks = NULL) +  # Pretty breaks for years
-  labs(title = "Maximum Shannon Diversity Per Year",
-       x = "Year",
-       y = "Maximum Shannon Diversity") +
-  theme_minimal()
-```
-
-
-```{r}
-# Prepare the data with Year and Shannon Diversity
-shannon_yearly_med <- shannon_data_extend %>%
-  group_by(Year) %>%
-  summarize(Median_Shannon_Diversity = median(Shannon_Diversity)) %>%
-  ungroup()  # to remove the grouping
-
-shannon_yearly_med
-# Define the breaks for the x-axis
-year_breaks <- shannon_avg_yearly$Year
-
-# Plot the data
-ggplot(shannon_yearly_med, aes(x = as.numeric(Year), y = Median_Shannon_Diversity)) +
-  geom_line(group = 1, color = "blue") +  # Line plot
-  geom_point(color = "red") +  # Add points
-  scale_x_continuous(breaks = year_breaks) +
-  #scale_x_continuous(breaks = scales::pretty_breaks(n = 10), minor_breaks = NULL) +  # Pretty breaks for years
-  labs(title = "Median Shannon Diversity Per Year",
-       x = "Year",
-       y = "Median Shannon Diversity") +
-  theme_minimal()
-```
-This calculates average shannon diversity per segment per year. 
-```{r}
-#Prepare the data by grouping by Segment and Year
-shannon_location_year <- shannon_data_extend %>%
-  group_by(Segment, Year) %>%
-  summarize(Avg_Shannon_Diversity = mean(Shannon_Diversity)) %>%
-  ungroup()  # Ungroup to avoid issues in further manipulation
-
-#Plot
-ggplot(shannon_location_year, aes(x = Segment, y = Avg_Shannon_Diversity, group = Year, color = as.factor(Year))) +
-  geom_line() +  # Add lines
-  geom_point(aes(shape = as.factor(Year))) +  # Add points and use different shapes for each year
-  scale_color_manual(values = rainbow(length(unique(shannon_location_year$Year)))) +  # Set manual colors if desired
-  labs(title = "Average Shannon Diversity Across Locations by Year",
-       x = "Location (Segment)",
-       y = "Average Shannon Diversity") +
-  theme_minimal() +
-  theme(legend.title = element_blank())  # Hide the legend title if you wish
-```
-This chunk will calculate the species richness for each data point collected
-
-```{r}
-# Add a Date column to diversity_data based on the matching row number in shannon_data_extend
-diversity_data$Date <- shannon_data_extend$Date
-
-# Now plot the Richness for each sample date
-ggplot(diversity_data, aes(x = Date, y = Richness)) +
-  geom_line() +  # Add lines connecting the points
-  geom_point(aes(color = as.factor(format(Date, "%Y")))) +  # Points colored by year
-  labs(title = "Species Richness Over Time",
-       x = "Date",
-       y = "Species Richness") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
-
-```
-This chunk will calculate the average species richness for each month point collected
-
-```{r}
-# Add a year-month column for grouping
-diversity_data$YearMonth <- format(diversity_data$Date, "%Y-%m")
-
-# Calculate the average species richness for each month
-average_monthly_richness <- diversity_data %>%
-  group_by(YearMonth) %>%
-  summarize(Average_Richness = mean(Richness, na.rm = TRUE)) %>%
-  ungroup() %>%
-  mutate(YearMonth = as.Date(paste(YearMonth, "01", sep = "-")))  # Convert YearMonth back to a Date object for plotting
-
-# Plot the average species richness per month
-ggplot(average_monthly_richness, aes(x = YearMonth, y = Average_Richness)) +
-  geom_line() +  # Add lines connecting the points
-  geom_point(aes(color = as.factor(year(YearMonth)))) +  # Points colored by year
-  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +  # Set x-axis breaks to show only years
-  labs(title = "Average Monthly Species Richness Over Time",
-       x = "Year",
-       y = "Average Species Richness") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))  # Rotate x-axis labels for readability
-
-```
-```{r}
-# Ensure that diversity_data has the Segment information
-diversity_data$Segment <- shannon_data_extend$Segment
-
-# Calculate the average species richness for each location (Segment)
-richness_avg_location <- diversity_data %>%
-  group_by(Segment) %>%
-  summarize(Avg_Richness = mean(Richness, na.rm = TRUE)) %>%
-  ungroup()
-
-# Plot average species richness for each location
-ggplot(richness_avg_location, aes(x = Segment, y = Avg_Richness)) +
-  geom_line(color = "black") +
-  geom_point(color = "blue") +
-  labs(title = "Species Richness Across Locations",
-       x = "Segment",
-       y = "Average Species Richness") +
-  theme_minimal()
-```
-
-
-```{r}
-# Ensure that diversity_data has Segment and Year information
-diversity_data$Segment <- shannon_data_extend$Segment
-diversity_data$Year <- shannon_data_extend$Year
-
-# Calculate the average species richness for each segment per year
-richness_location_year <- diversity_data %>%
-  group_by(Segment, Year) %>%
-  summarize(Avg_Richness = mean(Richness, na.rm = TRUE)) %>%
-  ungroup()
-
-# Plot the average species richness across locations by year
-ggplot(richness_location_year, aes(x = Segment, y = Avg_Richness, group = Year, color = as.factor(Year))) +
-  geom_line() +  # Add lines
-  geom_point(aes(shape = as.factor(Year))) +  # Add points and use different shapes for each year
-  scale_color_manual(values = rainbow(length(unique(richness_location_year$Year)))) +  # Set manual colors if desired
-  labs(title = "Average Species Richness Across Locations by Year",
-       x = "Location (Segment)",
-       y = "Average Species Richness") +
-  theme_minimal() +
-  theme(legend.title = element_blank())  # Hide the legend title if you wish
-```
-
-
-```{r}
-# Filter out the "ELK" and "PMC" segments
-richness_location_year_filtered <- richness_location_year %>%
-  filter(Segment != "ELK", Segment != "PMC")
-
-# Plot the average species richness across locations by year, excluding "ELK" and "PMC"
-ggplot(richness_location_year_filtered, aes(x = Segment, y = Avg_Richness, group = Year, color = as.factor(Year))) +
-  geom_line() +  # Add lines
-  geom_point(aes(shape = as.factor(Year))) +  # Add points and use different shapes for each year
-  scale_color_manual(values = rainbow(length(unique(richness_location_year_filtered$Year)))) +  # Set manual colors if desired
-  labs(title = "Average Species Richness Across Locations by Year (Excluding ELK and PMC)",
-       x = "Location (Segment)",
-       y = "Average Species Richness") +
-  theme_minimal() +
-  theme(legend.title = element_blank())  # Hide the legend title if you wish
-```
-
-```{r}
-# Ensure that diversity_data has Segment and Year information
-diversity_data$Segment <- shannon_data_extend$Segment
-diversity_data$Year <- shannon_data_extend$Year
-
-# Filter out the "ELK" and "PMC" segments
-richness_location_year_filtered <- diversity_data %>%
-  filter(Segment != "ELK", Segment != "PMC") %>%
-  group_by(Segment, Year) %>%
-  summarize(Avg_Richness = mean(Richness, na.rm = TRUE)) %>%
-  ungroup()
-
-# Plot the average species richness across years by Segment
-ggplot(richness_location_year_filtered, aes(x = Year, y = Avg_Richness, group = Segment, color = Segment)) +
-  geom_line() +  # Add lines
-  geom_point() +  # Add points
-  scale_color_manual(values = rainbow(length(unique(richness_location_year_filtered$Segment)))) +  # Set manual colors for each Segment
-  labs(title = "Average Species Richness Across Years by Segment",
-       x = "Year",
-       y = "Average Species Richness") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
-
-```
 ```{r}
 platte_fish_cleaned <- platte_fish_cleaned %>%
   mutate(Count = as.numeric(as.character(Count)))
@@ -560,15 +381,55 @@ sturgeon_count_yearly <- sturgeon_data %>%
 
 # Plot the Sturgeon count over time
 ggplot(sturgeon_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_line() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  geom_smooth(color = "brown") +
+  #geom_line() +  # Add lines connecting the points
+  #geom_point(color = "brown") +  # Add points
   scale_x_continuous(breaks = unique(sturgeon_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Sturgeon Populations Over Time",
        x = "Year",
        y = "Total Count") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+sturgeon_min_length <- min(sturgeon_data$Length, na.rm = TRUE)
+sturgeon_max_length <- max(sturgeon_data$Length, na.rm = TRUE)
+sturgeon_mean_length <- mean(sturgeon_data$Length, na.rm = TRUE)
+sturgeon_min_weight <- min(sturgeon_data$Weight, na.rm = TRUE)
+sturgeon_max_weight <- max(sturgeon_data$Weight, na.rm = TRUE)
+sturgeon_mean_weight <- mean(sturgeon_data$Weight, na.rm = TRUE)
+
+# Filter the data for species 26
+pallid_data <- platte_fish_cleaned %>%
+  filter(Species == 26)
+
+# Count the number of times species 26 was found
+num_occurrences <- nrow(pallid_data)
+
+# Sum up the count of species 26
+total_count_pallid<- sum(pallid_data$Count, na.rm = TRUE)
+
+# Print the results
+print(paste("Pallid Sturgeon was found", num_occurrences, "times with a total count of", total_count_pallid, "individuals."))
 ```
+```{r}
+# Calculate the average body length by year
+average_length_yearly <- sturgeon %>%
+  group_by(Year) %>%
+  summarize(AverageLength = mean(Length, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the average body length across time
+ggplot(average_length_yearly, aes(x = Year, y = AverageLength)) +
+  geom_smooth() +  # Line plot
+  geom_point() +  # Points for each year
+  scale_x_continuous(breaks = unique(average_length_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Average Sturgeon Body Length Over Time",
+       x = "Year",
+       y = "Average Body Length (mm)") +
+  theme_minimal()
+```
+
+
 ```{r}
 platte_fish_cleaned <- platte_fish_cleaned %>%
   mutate(Count = as.numeric(as.character(Count)))
@@ -588,7 +449,8 @@ catfish_count_yearly <- catfish_data %>%
 
 # Plot the catfish count over time
 ggplot(catfish_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_line() +  # Add lines connecting the points
+  geom_smooth() +
+  #geom_line() +  # Add lines connecting the points
   geom_point(color = "blue") +  # Add points
   scale_x_continuous(breaks = unique(catfish_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Catfish Population Over Time",
@@ -597,6 +459,24 @@ ggplot(catfish_count_yearly, aes(x = Year, y = Total_Count)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 ```
+```{r}
+# Calculate the average body length by year
+catfish_average_length_yearly <- catfish %>%
+  group_by(Year) %>%
+  summarize(AverageLength = mean(Length, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the average body length across time
+ggplot(catfish_average_length_yearly, aes(x = Year, y = AverageLength)) +
+  geom_smooth() +  # Line plot
+  geom_point() +  # Points for each year
+  scale_x_continuous(breaks = unique(catfish_average_length_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Average Catfish Body Length Over Time",
+       x = "Year",
+       y = "Average Body Length (mm)") +
+  theme_minimal()
+```
+
 
 ```{r}
 platte_fish_cleaned <- platte_fish_cleaned %>%
@@ -617,8 +497,8 @@ carp_count_yearly <- carp_data %>%
 
 # Plot the catfish count over time
 ggplot(carp_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_line() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  geom_smooth(color = "red") +  # Add lines connecting the points
+  geom_point(color = "red") +  # Add points
   scale_x_continuous(breaks = unique(carp_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Carp Population Over Time",
        x = "Year",
@@ -626,6 +506,28 @@ ggplot(carp_count_yearly, aes(x = Year, y = Total_Count)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 ```
+
+This will calculate and plot average body length for carp
+```{r}
+# Calculate the average body length by year
+carp_average_length_yearly <- carp %>%
+  group_by(Year) %>%
+  summarize(AverageLength = mean(Length, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the average body length across time
+ggplot(carp_average_length_yearly, aes(x = Year, y = AverageLength)) +
+  geom_smooth() +  # Line plot
+  geom_point() +  # Points for each year
+  scale_x_continuous(breaks = unique(carp_average_length_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Average Carp Body Length Over Time",
+       x = "Year",
+       y = "Average Body Length (mm)") +
+  theme_minimal()
+```
+
+
+
 
 ```{r}
 platte_fish_cleaned <- platte_fish_cleaned %>%
@@ -645,14 +547,19 @@ carp_count_segment_yearly <- carp_data %>%
 
 # Plot the Carp count over time for each segment
 ggplot(carp_count_segment_yearly, aes(x = Year, y = Total_Count, group = Segment, color = Segment)) +
-  geom_line() +  # Add lines connecting the points
-  geom_point() +  # Add points
+  geom_smooth() +  # Add lines connecting the points
+  #geom_point() +  # Add points
   scale_x_continuous(breaks = unique(carp_count_segment_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Carp Populations Over Time by Segment",
        x = "Year",
        y = "Total Count") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+here i would like to plot the four different species of carps together. 
+
+```{r}
+
 ```
 
 
@@ -676,8 +583,8 @@ catfish_count_segment_yearly <- catfish_data %>%
 
 # Plot the Carp count over time for each segment
 ggplot(catfish_count_segment_yearly, aes(x = Year, y = Total_Count, group = Segment, color = Segment)) +
-  geom_line() +  # Add lines connecting the points
-  geom_point() +  # Add points
+  geom_smooth() +  # Add lines connecting the points
+  #geom_point() +  # Add points
   scale_x_continuous(breaks = unique(catfish_count_segment_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Catfish Populations Over Time by Segment",
        x = "Year",
@@ -697,7 +604,8 @@ sturgeon_data <- platte_fish_cleaned %>%
   filter(Species %in% c(20,24,26,27,28))
 
 sturgeon_data <- sturgeon_data %>%
-  filter(!is.na(Count))
+  filter(!is.na(Count)) %>% 
+  filter(Segment != "ELK", Segment != "PMC", Segment != "CP")
 
 # Summarize the data to get the total count per year (or per month if needed)
 sturgeon_count_yearly <- sturgeon_data %>%
@@ -707,7 +615,7 @@ sturgeon_count_yearly <- sturgeon_data %>%
 
 # Plot the Sturgeon count over time
 ggplot(sturgeon_count_yearly, aes(x = Year, y = Total_Count, group = Segment, color = Segment)) +
-  geom_line() +  # Add lines connecting the points
+  geom_smooth() +  # Add lines connecting the points
   geom_point() +  # Add points
   scale_x_continuous(breaks = unique(sturgeon_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Sturgeon Populations Over Time per Segment",
@@ -716,7 +624,303 @@ ggplot(sturgeon_count_yearly, aes(x = Year, y = Total_Count, group = Segment, co
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 ```
+```{r}
+#separating out all the differet types of sturegeon
+shiner_data <- platte_fish_cleaned %>%
+  filter(Species %in% c(124, 126, 128, 129, 130, 132, 134, 138, 144, 145, 148, 149))
 
+shiner_data <- shiner_data %>%
+  filter(!is.na(Count)) 
+  #filter(Segment != "ELK", Segment != "PMC", Segment != "CP")
+
+# Summarize the data to get the total count per year (or per month if needed)
+shiner_count_yearly <- shiner_data %>%
+  group_by(Segment, Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the Sturgeon count over time
+ggplot(shiner_count_yearly, aes(x = Year, y = Total_Count, group = Segment, color = Segment)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point() +  # Add points
+  scale_x_continuous(breaks = unique(shiner_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Shiner Populations Over Time per Segment",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+Okay, now I want to plot the average Shiner populations across all segments
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+shiner_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(124, 126, 128, 129, 130, 132, 134, 138, 144, 145, 148, 149))
+
+
+
+
+shiner_data_avg <- shiner_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+shiner_count_yearly <- shiner_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(shiner_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(shiner_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Shiner Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+shiner_min_length <- min(shiner_data$Length, na.rm = TRUE)
+shiner_max_length <- max(shiner_data$Length, na.rm = TRUE)
+shiner_mean_length <- mean(shiner_data$Length, na.rm = TRUE)
+shiner_min_weight <- min(shiner_data$Weight, na.rm = TRUE)
+shiner_max_weight <- max(shiner_data$Weight, na.rm = TRUE)
+shiner_mean_weight <- mean(shiner_data$Weight, na.rm = TRUE)
+
+print(paste("The range of body length (mm) for the selected species is from", min_length, "to", max_length))
+print(paste("The range of body weight (g) for the selected species is from", min_weight, "to", max_weight))
+
+```
+I want this to be smallmouth and largemouth bass
+
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+bass_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(620, 645, 714, 750, 770))
+
+bass_data_avg <- bass_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+bass_count_yearly <- bass_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(bass_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(bass_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Bass Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+chub_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(106, 112, 116, 118))
+
+chub_data_avg <- chub_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+chub_count_yearly <- chub_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(chub_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(chub_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Chub Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+minnow_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(150, 152, 154, 156, 158, 160, 162))
+
+minnow_data_avg <- minnow_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+minnow_count_yearly <- minnow_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(minnow_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(minnow_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Minnow Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+lepomis_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(720, 722, 724, 726, 730, 738))
+
+lepomis_data_avg <- lepomis_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+lepomis_count_yearly <- lepomis_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(lepomis_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(lepomis_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Lepomis Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+This shows the population of Gar in the Platte. This is of special interest due to the fact that Gar enjoy shallow, slow moving, warm water, and can tolerate low levels of dissolved oxygen. 
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+gar_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(42, 44))
+
+gar_data_avg <- gar_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+gar_count_yearly <- gar_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(gar_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(gar_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Gar Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+drum_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(860, 862))
+
+drum_data_avg <- drum_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+drum_count_yearly <- drum_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(drum_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(drum_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Drum Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+shorthorse_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(262))
+
+shorthorse_data_avg <- shorthorse_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+shorthorse_count_yearly <- shorthorse_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(shorthorse_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(shorthorse_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Shorthead Redhorse Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+sucker_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(210, 212, 214))
+
+sucker_data_avg <- sucker_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+sucker_count_yearly <- sucker_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(sucker_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth() +  # Add lines connecting the points
+  geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(sucker_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Sucker Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
 
 Okay, I want this chunk to plot native vs. nonnative species, 
 ```{r}
@@ -737,27 +941,32 @@ combined_fish_data <- bind_rows(
 )
 
 # Plotting
-native_v_nonnative_plot <- ggplot(combined_fish_data, aes(x = Year, y = TotalCount, color = Origin, group = Origin)) +
-  geom_line() +
-  scale_color_manual(values = c("Nat" = "blue", "Non" = "red")) +
-  labs(x = "Year", y = "Total Count", color = "Origin", title = "Fish Counts Over Time by Origin") +
-  theme_minimal()
+#native_v_nonnative_plot <- ggplot(combined_fish_data, aes(x = Year, y = TotalCount, color = Origin, group = Origin)) +
+  #geom_line() +
+  #scale_color_manual(values = c("Nat" = "blue", "Non" = "red")) +
+  #labs(x = "Year", y = "Total Count", color = "Origin", title = "Fish Counts Over Time by Origin") +
+  #theme_minimal()
 
-print(native_v_nonnative_plot)
+#print(native_v_nonnative_plot)
 
 # Find the maximum count for scaling
 max_count_native <- max(native_fish_yearly$TotalCount)
 max_count_nonnative <- max(nonnative_fish_yearly$TotalCount)
 # Create the plot
 plot <- ggplot() +
-  geom_line(data = combined_fish_data[combined_fish_data$Origin == "Nat", ], 
-            aes(x = Year, y = TotalCount/max_count_native, group = Origin), 
+
+  geom_smooth(data = combined_fish_data[combined_fish_data$Origin == "Nat", ], 
+            aes(x = Year, y = TotalCount, group = Origin), 
             color = "blue") +
-  geom_line(data = combined_fish_data[combined_fish_data$Origin == "Non", ], 
-            aes(x = Year, y = TotalCount/max_count_nonnative, group = Origin), 
+  scale_x_continuous(breaks = unique(native_fish_yearly$Year)) +  # Specify x-axis breaks to be each year
+  geom_point() +
+
+  geom_smooth(data = combined_fish_data[combined_fish_data$Origin == "Non", ], 
+            aes(x = Year, y = TotalCount, group = Origin), 
             color = "red") +
-  
-  labs(x = "Year", y = "Total Count (Scaled)", title = "Native and Nonnative Fish Population") +
+  geom_point() +
+  scale_x_continuous(breaks = unique(nonnative_fish_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(x = "Year", y = "Total Count (Scaled)", title = "Native and Nonnative Fish Population (Scaled)") +
   theme_minimal()
 
 # Print the plot
@@ -773,10 +982,11 @@ create_segment_plot <- function(segment_data, title) {
 
   # Create the plot
   plot <- ggplot() +
-    geom_line(data = segment_data[segment_data$Origin == "Nat", ], 
+    geom_smooth(data = segment_data[segment_data$Origin == "Nat", ], 
               aes(x = Year, y = TotalCount/max_count_native, group = Origin), 
               color = "blue") +
-    geom_line(data = segment_data[segment_data$Origin == "Non", ], 
+    scale_x_continuous(breaks = unique(nonnative_fish_yearly$Year)) +  # Specify x-axis breaks to be each year
+    geom_smooth(data = segment_data[segment_data$Origin == "Non", ], 
               aes(x = Year, y = TotalCount/max_count_nonnative, group = Origin), 
               color = "red") +
     scale_y_continuous("Count (Scaled)", 
@@ -815,4 +1025,352 @@ print(ULP_plot)
 #print(ELK_plot)
 #print(PMC_plot)
 ```
+Goal here is to calculate Jaccard index
+```{r}
+# Convert counts to presence/absence
+fish_vegan_pa <- fish_vegan %>%
+  mutate(across(-sample_id, ~ ifelse(. > 0, 1, 0)))  # Convert counts to 1 (presence) or 0 (absence) for all species columns
+
+# Separate Segment from sample_id
+fish_vegan_pa <- fish_vegan_pa %>%
+  separate(sample_id, into = c("Segment", "Year", "Month", "Day"), sep = "-") %>%
+  filter(!Segment %in% c("ELK", "PMC")) %>%
+  select(-Year, -Month, -Day)  # Remove date parts if only segment comparison is needed
+
+# Aggregate by Segment
+fish_vegan_pa_aggregated <- fish_vegan_pa %>%
+  group_by(Segment) %>%
+  summarise(across(everything(), max))  # Aggregate by taking the maximum (presence/absence) across all species
+
+jaccard_numeric_data <- fish_vegan_pa_aggregated %>% select(-Segment)
+# Now, 'fish_vegan_pa_aggregated' is ready for Jaccard index calculation
+
+# Set row names to Segment names for Jaccard Distance calculation
+row.names(jaccard_numeric_data) <- fish_vegan_pa_aggregated$Segment
+
+# Calculate Jaccard Distance
+jaccard_dist <- vegdist(jaccard_numeric_data, method = "jaccard")
+
+# View the Jaccard Distance matrix
+print(jaccard_dist)
+
+# Convert the distance matrix to a format suitable for ggplot
+melted_jaccard_dist <- melt(as.matrix(jaccard_dist))
+
+# Create heatmap
+ggplot(melted_jaccard_dist, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black") +
+  labs(x = "Segment", y = "Segment", fill = "Jaccard Distance") +
+  theme_minimal()
+
+
+
+# 1. CP
+# 2. ELK
+# 3. LLP
+# 4. PMC
+# 5. ULP
+# let's try to remove 4 and 2, aka ELK and PMC. 
+```
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Calculate average length per year for native and nonnative species
+average_length_yearly <- platte_fish_extended %>%
+  group_by(Year, Origin) %>%
+  summarise(AverageLength = mean(Length, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plotting
+length_plot <- ggplot(average_length_yearly, aes(x = Year, y = AverageLength, color = Origin, group = Origin)) +
+  geom_smooth() +
+  scale_color_manual(values = c("Nat" = "blue", "Non" = "red")) +
+  labs(x = "Year", y = "Average Length", color = "Origin", title = "Average Length Over Time by Origin") +
+  theme_minimal()
+
+# Print the plot
+print(length_plot)
+
+```
+```{r}
+# Calculate average length per year for native and nonnative species
+average_weight_yearly <- platte_fish_extended %>%
+  group_by(Year, Origin) %>%
+  summarise(AverageWeight = mean(Weight, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plotting
+weight_plot <- ggplot(average_weight_yearly, aes(x = Year, y = AverageWeight, color = Origin, group = Origin)) +
+  geom_line() +
+  scale_color_manual(values = c("Nat" = "blue", "Non" = "red")) +
+  labs(x = "Year", y = "Average Weight", color = "Origin", title = "Average Weight Over Time by Origin") +
+  theme_minimal()
+
+# Print the plot
+print(weight_plot)
+```
+
+Water analysis
+```{r}
+#retrieves Louisville  info
+site_number <- c("06805500")
+site_info <- readNWISsite(site_number)
+print(site_info)
+
+#daily value available for Louisville
+dailyDataAvailable <- whatNWISdata(
+  siteNumber = site_number,
+  service = "dv",
+  statCd = "00003"
+)
+
+print(dailyDataAvailable)
+
+#reads water usage statistics
+allegheny <- readNWISuse(
+  stateCd = "Nebraska",
+  countyCd = NULL
+)
+print(allegheny)
+
+parameterCd <- c("00010", "00060") # Temperature and discharge
+statCd <- c("00001", "00003") # Mean and maximum
+startDate <- "2011-01-01"
+endDate <- "2014-01-01"
+
+temperatureAndFlow <- readNWISdv(site_number, parameterCd,
+  startDate, endDate,
+  statCd = statCd
+)
+temperatureAndFlow <- renameNWISColumns(temperatureAndFlow)
+names(temperatureAndFlow)
+names(attributes(temperatureAndFlow))
+statInfo <- attr(temperatureAndFlow, "statisticInfo")
+variableInfo <- attr(temperatureAndFlow, "variableInfo")
+siteInfo <- attr(temperatureAndFlow, "siteInfo")
+
+
+
+
+# Plotting the data
+variableInfo <- attr(temperatureAndFlow, "variableInfo")
+siteInfo <- attr(temperatureAndFlow, "siteInfo")
+
+par(mar = c(5, 5, 5, 5)) # sets the size of the plot window
+
+plot(temperatureAndFlow$Date, temperatureAndFlow$Wtemp_Max,
+  ylab = "Temperature (deg C)",
+  xlab = "",
+  pch = 1, # Sets the type of point
+  col = "black"
+)
+par(new = TRUE)
+plot(temperatureAndFlow$Date,
+  temperatureAndFlow$Flow,
+  col = "blue", type = "l",
+  xaxt = "n", yaxt = "n",
+  xlab = "", ylab = "",
+  axes = FALSE
+)
+axis(4, col = "blue", col.axis = "blue")
+mtext("Flow (ft3/s)", side = 4, line = 3, col = "blue")
+title(paste(siteInfo$station_nm, "2012"))
+
+legend("topleft", 
+       legend = c("Temp. (deg C)", "Flow (ft3/s)"), 
+       col = c("black", "blue"), 
+       lty = c(NA, 1), # Only second item (flow) has a line type
+       pch = c(1, NA)  # Only first item (temperature) has a point type
+)
+```
+
+```{r}
+site_number <- c("06805500")
+parameterCd <- c("00010", "00065", "00060", "00045") # Temperature and Gage Height
+data <- readNWISdv(site_number, parameterCd, startDate, endDate)
+data <- renameNWISColumns(data)
+
+# Splitting the data into two separate data frames for plotting
+temperatureData <- data[, c("Date", "Wtemp")]
+gageHeightData <- data[, c("Date", "GH")]
+
+# Plotting the data
+par(mar = c(5, 4, 4, 4) + 0.3)  # Adjust margins to accommodate two y-axes
+
+# First plot (Temperature)
+plot(temperatureData$Date, temperatureData$Wtemp,
+     col = "black", pch = 1,
+     xlab = "Date", ylab = "Temperature (°C)")
+
+# Add second plot (Gage Height) using a secondary axis
+par(new = TRUE)
+plot(gageHeightData$Date, gageHeightData$GH,
+     type = "l", col = "blue",
+     xaxt = "n", yaxt = "n", xlab = "", ylab = "",
+     axes = FALSE)
+axis(4, col.axis = "blue")
+mtext("Gage Height (ft)", side = 4, line = 3, col = "blue")
+
+# Add a legend
+legend("topright", 
+       legend = c("Temp. (deg C)", "Gage Height (ft)"), 
+       col = c("red", "blue"), 
+       lty = 1)
+```
+
+```{r}
+# Count the total number of nonnative fish
+total_nonnative_fish <- sum(nonnative_fish$Count)
+total_native_fish <- sum(native_fish$Count)
+total_fish <- sum(platte_fish_cleaned$Count)
+
+
+
+
+# Filter the rows where species is 178
+species_178_data <- nonnative_fish[nonnative_fish$Species == 178, ]
+
+# Sum the "Count" column of this filtered dataset
+fish_178_count <- sum(species_178_data$Count)
+
+# Print the result
+print(paste("Total count of species 178:", fish_178_count))
+
+
+# Calculate the percentage
+percentage_178 <- (fish_178_count / total_fish) * 100
+
+# Print the result
+print(paste("Percentage of Common Carp:", percentage_178, "%"))
+
+
+# Filter the rows where species is 178
+channel_cat_data <- native_fish[native_fish$Species == 360, ]
+
+# Sum the "Count" column of this filtered dataset
+channel_cat_count <- sum(channel_cat_data$Count)
+
+# Print the result
+print(paste("Total count of channel catfish:", channel_cat_count))
+
+
+# Calculate the percentage
+percentage_channel_cat <- (channel_cat_count / total_fish) * 100
+
+# Print the result
+print(paste("Percentage of Channel Catfish:", percentage_channel_cat, "%"))
+
+
+
+
+# Filter the rows where species is 178
+species_carp_data <- nonnative_fish[nonnative_fish$Species %in% c(176,178,180,181,182), ]
+
+# Sum the "Count" column of this filtered dataset
+species_carp_count <- sum(species_carp_data$Count)
+
+# Print the result
+print(paste("Total count of carps:", species_carp_count))
+
+
+# Calculate the percentage
+carp_percentage <- (species_carp_count / total_fish) * 100
+
+# Print the result
+print(paste("Percentage of Carp:", carp_percentage, "%"))
+
+
+
+
+
+
+
+# Filter the rows where species is 178
+species_catfish_data <- native_fish[native_fish$Species %in% c(300,350,355,360,365,370), ]
+
+# Sum the "Count" column of this filtered dataset
+species_catfish_count <- sum(species_catfish_data$Count)
+
+# Print the result
+print(paste("Total count of catfish:", species_catfish_count))
+
+
+# Calculate the percentage
+catfish_percentage <- (species_catfish_count / total_fish) * 100
+
+# Print the result
+print(paste("Percentage of catfish:", catfish_percentage, "%"))
+
+
+
+
+
+# Filter the rows where species is 178
+species_sturgeon_data <- native_fish[native_fish$Species %in% c(26,28), ]
+
+# Sum the "Count" column of this filtered dataset
+species_sturgeon_count <- sum(species_sturgeon_data$Count)
+
+# Print the result
+print(paste("Total count of sturgeon:", species_sturgeon_count))
+
+
+# Calculate the percentage
+sturgeon_percentage <- (species_sturgeon_count / total_fish) * 100
+
+# Print the result
+print(paste("Percentage of sturgeon:", sturgeon_percentage, "%"))
+
+
+
+
+
+# List of electrofishing gear types
+electrofishing_gear <- c("EF", "BPEF", "EFH", "EFL", "FAC")
+
+# Filter the rows where gear is one of the electrofishing types
+electrofishing_data <- platte_fish_cleaned[platte_fish_cleaned$Gear %in% electrofishing_gear, ]
+
+# Sum the "Count" column of this filtered dataset
+electrofishing_count <- sum(electrofishing_data$Count)
+
+
+# Calculate the percentage
+percentage_electrofishing <- (electrofishing_count / total_fish) * 100
+
+
+
+
+
+
+
+# Print the result
+print(paste("Percentage of fish collected using electrofishing methods:", round(percentage_electrofishing, 2), "%"))
+
+
+species_names <- data.frame(SpeciesID = c(360, 120, 144, 178, 370, 212, 132, 862, 262, 44))
+                            SpeciesName = c("Channel Catfish", "Red Shiner", "Sand Shiner", "Common Carp", "Flathead Catfish", "River Carpsucker", "River Shiner, Freshwater drum, Shorthead Redhorse", "Shortnose Gar")
+
+# Merge the species names with species_df
+species_df <- merge(species_df, species_names, by = "SpeciesID", all.x = TRUE)
+
+# Count the occurrences of each species ID
+species_counts <- table(platte_fish_cleaned$Species)
+
+# Convert to a data frame
+species_df <- as.data.frame(species_counts, stringsAsFactors = FALSE)
+names(species_df) <- c("SpeciesID", "Count")
+
+# Sort the data frame by count in descending order
+species_df <- species_df[order(-species_df$Count), ]
+
+# Optionally, add a rank column
+species_df$Rank <- 1:nrow(species_df)
+
+# View the top species
+head(species_df)
+```
+total_fish
 

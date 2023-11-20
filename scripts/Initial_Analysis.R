@@ -12,10 +12,11 @@ platte_fish <- read_excel("~/Documents/Biology/Biology Research/Platte River/Pla
 
 #cleaning the No Fish, and Net did not Fish from the data (999 and 998)
 platte_fish_cleaned <- platte_fish %>%
-  select(Segment, Year, Month, Day, Length, Weight, Species, Count) %>% #might add in Size
+  select(Segment, Year, Month, Day, Length, Weight, Species, Count, Gear) %>% #might add in Size
   filter(!Species %in% c(999,998,997,NA)) %>%
-  mutate(Count = as.numeric(as.character(Count)))
-
+  mutate(Count = as.numeric(as.character(Count))) %>%
+  mutate(Length = as.numeric(as.character(Length))) %>%
+  mutate(Weight = as.numeric(as.character(Weight)))
 
 platte_fish_extended <- platte_fish_cleaned %>%
   mutate(
@@ -24,6 +25,7 @@ platte_fish_extended <- platte_fish_cleaned %>%
       TRUE ~ "Nat"  # Assign "Nat" to all other species
     )
   )
+
 
 LLP_fish <- platte_fish_extended %>%
   filter(Segment == "LLP")
@@ -42,19 +44,24 @@ PMC_fish <- platte_fish_extended %>%
 
 # Creating the dataset for native fish
 native_fish <- platte_fish_extended %>%
-  filter(Origin == "Nat")
+  filter(Origin == "Nat") %>%
+  filter(Segment != "NA")
 
 # Creating the dataset for non-native fish
 nonnative_fish <- platte_fish_extended %>%
-  filter(Origin == "Non")
+  filter(Origin == "Non") %>%
+  filter(Segment != "NA")
 
 #separating out all the differet types of sturegeon
 sturgeon <- platte_fish_cleaned %>%
   filter(Species %in% c(20,24,26,27,28))
 
+
 #separates just the endangered pallid sturgeon
 pallid_sturgeon <- platte_fish_cleaned %>%
   filter(Species == 26)
+
+
 
 #separates just the catfish
 catfish <- platte_fish_cleaned %>%
