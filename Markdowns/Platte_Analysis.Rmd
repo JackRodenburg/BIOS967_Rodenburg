@@ -15,6 +15,8 @@ library(tidyr)
 library(scales)
 library(reshape2)
 library(dataRetrieval)
+library(magick)
+library(knitr)
 ```
 
 # 1. Initial Analysis- creates fish_vegan and numeric_data
@@ -420,8 +422,8 @@ average_length_yearly <- sturgeon %>%
 
 # Plot the average body length across time
 ggplot(average_length_yearly, aes(x = Year, y = AverageLength)) +
-  geom_smooth() +  # Line plot
-  geom_point() +  # Points for each year
+  geom_smooth(color = "brown") +  # Line plot
+  #geom_point() +  # Points for each year
   scale_x_continuous(breaks = unique(average_length_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Average Sturgeon Body Length Over Time",
        x = "Year",
@@ -451,7 +453,7 @@ catfish_count_yearly <- catfish_data %>%
 ggplot(catfish_count_yearly, aes(x = Year, y = Total_Count)) +
   geom_smooth() +
   #geom_line() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  #geom_point(color = "blue") +  # Add points
   scale_x_continuous(breaks = unique(catfish_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Catfish Population Over Time",
        x = "Year",
@@ -469,7 +471,7 @@ catfish_average_length_yearly <- catfish %>%
 # Plot the average body length across time
 ggplot(catfish_average_length_yearly, aes(x = Year, y = AverageLength)) +
   geom_smooth() +  # Line plot
-  geom_point() +  # Points for each year
+  #geom_point() +  # Points for each year
   scale_x_continuous(breaks = unique(catfish_average_length_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Average Catfish Body Length Over Time",
        x = "Year",
@@ -498,13 +500,30 @@ carp_count_yearly <- carp_data %>%
 # Plot the catfish count over time
 ggplot(carp_count_yearly, aes(x = Year, y = Total_Count)) +
   geom_smooth(color = "red") +  # Add lines connecting the points
-  geom_point(color = "red") +  # Add points
+  #geom_point(color = "black") +  # Add points
   scale_x_continuous(breaks = unique(carp_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Carp Population Over Time",
        x = "Year",
        y = "Total Count") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+# Assuming 'Species' column has species identifiers and 'Year' column has year information
+carp_count_yearly_species <- carp_data %>%
+  group_by(Year, Species) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(carp_count_yearly_species, aes(x = Year, y = Total_Count, color = as.factor(Species))) +
+  geom_line() +  # Add smooth lines for each species
+  scale_x_continuous(breaks = unique(carp_count_yearly_species$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Carp Population Over Time by Species",
+       x = "Year",
+       y = "Total Count",
+       color = "Species") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
 ```
 
 This will calculate and plot average body length for carp
@@ -517,8 +536,8 @@ carp_average_length_yearly <- carp %>%
 
 # Plot the average body length across time
 ggplot(carp_average_length_yearly, aes(x = Year, y = AverageLength)) +
-  geom_smooth() +  # Line plot
-  geom_point() +  # Points for each year
+  geom_smooth(color = "red") +  # Line plot
+  #geom_point() +  # Points for each year
   scale_x_continuous(breaks = unique(carp_average_length_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Average Carp Body Length Over Time",
        x = "Year",
@@ -555,11 +574,6 @@ ggplot(carp_count_segment_yearly, aes(x = Year, y = Total_Count, group = Segment
        y = "Total Count") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
-```
-here i would like to plot the four different species of carps together. 
-
-```{r}
-
 ```
 
 
@@ -608,14 +622,14 @@ sturgeon_data <- sturgeon_data %>%
   filter(Segment != "ELK", Segment != "PMC", Segment != "CP")
 
 # Summarize the data to get the total count per year (or per month if needed)
-sturgeon_count_yearly <- sturgeon_data %>%
+sturgeon_count_yearly_segment <- sturgeon_data %>%
   group_by(Segment, Year) %>%
   summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
   ungroup()
 
 # Plot the Sturgeon count over time
-ggplot(sturgeon_count_yearly, aes(x = Year, y = Total_Count, group = Segment, color = Segment)) +
-  geom_smooth() +  # Add lines connecting the points
+ggplot(sturgeon_count_yearly_segment, aes(x = Year, y = Total_Count, group = Segment, color = Segment)) +
+  geom_line() +  # Add lines connecting the points
   geom_point() +  # Add points
   scale_x_continuous(breaks = unique(sturgeon_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Sturgeon Populations Over Time per Segment",
@@ -673,8 +687,8 @@ shiner_count_yearly <- shiner_data_avg %>%
 
 # Plot the catfish count over time
 ggplot(shiner_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_smooth() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  geom_line(color = "orange") +  # Add lines connecting the points
+#geom_point(color = "black") +  # Add points
   scale_x_continuous(breaks = unique(shiner_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Shiner Population Over Time",
        x = "Year",
@@ -689,39 +703,9 @@ shiner_min_weight <- min(shiner_data$Weight, na.rm = TRUE)
 shiner_max_weight <- max(shiner_data$Weight, na.rm = TRUE)
 shiner_mean_weight <- mean(shiner_data$Weight, na.rm = TRUE)
 
-print(paste("The range of body length (mm) for the selected species is from", min_length, "to", max_length))
-print(paste("The range of body weight (g) for the selected species is from", min_weight, "to", max_weight))
+print(paste("The range of body length (mm) for the selected species is from", shiner_min_length, "to", shiner_max_length))
+print(paste("The range of body weight (g) for the selected species is from", shiner_min_weight, "to", shiner_max_weight))
 
-```
-I want this to be smallmouth and largemouth bass
-
-```{r}
-platte_fish_cleaned <- platte_fish_cleaned %>%
-  mutate(Count = as.numeric(as.character(Count)))
-
-#isolates just the carp
-bass_data_avg <- platte_fish_cleaned %>%
-  filter(Species %in% c(620, 645, 714, 750, 770))
-
-bass_data_avg <- bass_data_avg %>%
-  filter(!is.na(Count))
-
-# Summarize the data to get the total count per year (or per month if needed)
-bass_count_yearly <- bass_data_avg %>%
-  group_by(Year) %>%
-  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
-  ungroup()
-
-# Plot the catfish count over time
-ggplot(bass_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_smooth() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
-  scale_x_continuous(breaks = unique(bass_count_yearly$Year)) +  # Specify x-axis breaks to be each year
-  labs(title = "Bass Population Over Time",
-       x = "Year",
-       y = "Total Count") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 ```
 
 ```{r}
@@ -744,7 +728,7 @@ chub_count_yearly <- chub_data_avg %>%
 # Plot the catfish count over time
 ggplot(chub_count_yearly, aes(x = Year, y = Total_Count)) +
   geom_smooth() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  #geom_point(color = "blue") +  # Add points
   scale_x_continuous(breaks = unique(chub_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Chub Population Over Time",
        x = "Year",
@@ -758,7 +742,7 @@ platte_fish_cleaned <- platte_fish_cleaned %>%
 
 #isolates just the carp
 minnow_data_avg <- platte_fish_cleaned %>%
-  filter(Species %in% c(150, 152, 154, 156, 158, 160, 162))
+  filter(Species %in% c(100, 142, 150, 152, 154, 156, 158, 160, 162))
 
 minnow_data_avg <- minnow_data_avg %>%
   filter(!is.na(Count))
@@ -771,8 +755,8 @@ minnow_count_yearly <- minnow_data_avg %>%
 
 # Plot the catfish count over time
 ggplot(minnow_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_smooth() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  geom_smooth(color = "brown") +  # Add lines connecting the points
+  #geom_point(color = "blue") +  # Add points
   scale_x_continuous(breaks = unique(minnow_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Minnow Population Over Time",
        x = "Year",
@@ -785,29 +769,59 @@ platte_fish_cleaned <- platte_fish_cleaned %>%
   mutate(Count = as.numeric(as.character(Count)))
 
 #isolates just the carp
-lepomis_data_avg <- platte_fish_cleaned %>%
-  filter(Species %in% c(720, 722, 724, 726, 730, 738))
+sunfish_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(700, 720, 722, 724, 726, 730, 738))
 
-lepomis_data_avg <- lepomis_data_avg %>%
+sunfish_data_avg <- sunfish_data_avg %>%
   filter(!is.na(Count))
 
 # Summarize the data to get the total count per year (or per month if needed)
-lepomis_count_yearly <- lepomis_data_avg %>%
+sunfish_count_yearly <- sunfish_data_avg %>%
   group_by(Year) %>%
   summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
   ungroup()
 
 # Plot the catfish count over time
-ggplot(lepomis_count_yearly, aes(x = Year, y = Total_Count)) +
+ggplot(sunfish_count_yearly, aes(x = Year, y = Total_Count)) +
   geom_smooth() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
-  scale_x_continuous(breaks = unique(lepomis_count_yearly$Year)) +  # Specify x-axis breaks to be each year
-  labs(title = "Lepomis Population Over Time",
+  #geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(sunfish_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Sunfish Population Over Time",
        x = "Year",
        y = "Total Count") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 ```
+
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+crappie_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(780, 785, 790))
+
+crappie_data_avg <- crappie_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+crappie_count_yearly <- crappie_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(crappie_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_line() +  # Add lines connecting the points
+  #geom_point(color = "blue") +  # Add points
+  scale_x_continuous(breaks = unique(crappie_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Crappie Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+
 This shows the population of Gar in the Platte. This is of special interest due to the fact that Gar enjoy shallow, slow moving, warm water, and can tolerate low levels of dissolved oxygen. 
 ```{r}
 platte_fish_cleaned <- platte_fish_cleaned %>%
@@ -828,8 +842,8 @@ gar_count_yearly <- gar_data_avg %>%
 
 # Plot the catfish count over time
 ggplot(gar_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_smooth() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  geom_line() +  # Add lines connecting the points
+  #geom_point(color = "blue") +  # Add points
   scale_x_continuous(breaks = unique(gar_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Gar Population Over Time",
        x = "Year",
@@ -856,8 +870,8 @@ drum_count_yearly <- drum_data_avg %>%
 
 # Plot the catfish count over time
 ggplot(drum_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_smooth() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  geom_smooth(color = "navyblue") +  # Add lines connecting the points
+  #geom_point() +  # Add points
   scale_x_continuous(breaks = unique(drum_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Drum Population Over Time",
        x = "Year",
@@ -865,6 +879,67 @@ ggplot(drum_count_yearly, aes(x = Year, y = Total_Count)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
 ```
+Plotting Buffalo
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+buffalo_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(252, 254))
+
+buffalo_data_avg <- buffalo_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+buffalo_count_yearly <- buffalo_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(buffalo_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth(color = "brown") +  # Add lines connecting the points
+  #geom_point() +  # Add points
+  scale_x_continuous(breaks = unique(buffalo_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Buffalo Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+
+Plotting Buffalo
+```{r}
+platte_fish_cleaned <- platte_fish_cleaned %>%
+  mutate(Count = as.numeric(as.character(Count)))
+
+#isolates just the carp
+bullhead_data_avg <- platte_fish_cleaned %>%
+  filter(Species %in% c(310, 320))
+
+bullhead_data_avg <- bullhead_data_avg %>%
+  filter(!is.na(Count))
+
+# Summarize the data to get the total count per year (or per month if needed)
+bullhead_count_yearly <- bullhead_data_avg %>%
+  group_by(Year) %>%
+  summarize(Total_Count = sum(Count, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the catfish count over time
+ggplot(bullhead_count_yearly, aes(x = Year, y = Total_Count)) +
+  geom_smooth(color = "yellow") +  # Add lines connecting the points
+  #geom_point() +  # Add points
+  scale_x_continuous(breaks = unique(bullhead_count_yearly$Year)) +  # Specify x-axis breaks to be each year
+  labs(title = "Bullhead Population Over Time",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+
+
 ```{r}
 platte_fish_cleaned <- platte_fish_cleaned %>%
   mutate(Count = as.numeric(as.character(Count)))
@@ -884,8 +959,8 @@ shorthorse_count_yearly <- shorthorse_data_avg %>%
 
 # Plot the catfish count over time
 ggplot(shorthorse_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_smooth() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  geom_line() +  # Add lines connecting the points
+  #geom_point(color = "blue") +  # Add points
   scale_x_continuous(breaks = unique(shorthorse_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Shorthead Redhorse Population Over Time",
        x = "Year",
@@ -899,7 +974,7 @@ platte_fish_cleaned <- platte_fish_cleaned %>%
 
 #isolates just the carp
 sucker_data_avg <- platte_fish_cleaned %>%
-  filter(Species %in% c(210, 212, 214))
+  filter(Species %in% c(210, 212, 214, 224, 230))
 
 sucker_data_avg <- sucker_data_avg %>%
   filter(!is.na(Count))
@@ -912,8 +987,8 @@ sucker_count_yearly <- sucker_data_avg %>%
 
 # Plot the catfish count over time
 ggplot(sucker_count_yearly, aes(x = Year, y = Total_Count)) +
-  geom_smooth() +  # Add lines connecting the points
-  geom_point(color = "blue") +  # Add points
+  geom_line(color = "purple") +  # Add lines connecting the points
+  #geom_point(color = "purple") +  # Add points
   scale_x_continuous(breaks = unique(sucker_count_yearly$Year)) +  # Specify x-axis breaks to be each year
   labs(title = "Sucker Population Over Time",
        x = "Year",
@@ -955,14 +1030,14 @@ max_count_nonnative <- max(nonnative_fish_yearly$TotalCount)
 # Create the plot
 plot <- ggplot() +
 
-  geom_smooth(data = combined_fish_data[combined_fish_data$Origin == "Nat", ], 
-            aes(x = Year, y = TotalCount, group = Origin), 
+  geom_line(data = combined_fish_data[combined_fish_data$Origin == "Nat", ], 
+            aes(x = Year, y = TotalCount/max_count_native, group = Origin), 
             color = "blue") +
   scale_x_continuous(breaks = unique(native_fish_yearly$Year)) +  # Specify x-axis breaks to be each year
   geom_point() +
 
-  geom_smooth(data = combined_fish_data[combined_fish_data$Origin == "Non", ], 
-            aes(x = Year, y = TotalCount, group = Origin), 
+  geom_line(data = combined_fish_data[combined_fish_data$Origin == "Non", ], 
+            aes(x = Year, y = TotalCount/max_count_nonnative, group = Origin), 
             color = "red") +
   geom_point() +
   scale_x_continuous(breaks = unique(nonnative_fish_yearly$Year)) +  # Specify x-axis breaks to be each year
@@ -973,6 +1048,32 @@ plot <- ggplot() +
 print(plot)
 
 ```
+```{r}
+# Add a 'Group' column to each dataset
+minnow_count_yearly$Group <- 'Minnow'
+shiner_count_yearly$Group <- 'Shiner'
+sturgeon_count_yearly$Group <- 'Sturgeon'
+sucker_count_yearly$Group <- 'Sucker'
+gar_count_yearly$Group <- 'Gar'
+catfish_count_yearly$Group <- 'Catfish'
+
+# Combine the datasets
+combined_data <- rbind(gar_count_yearly, minnow_count_yearly, shiner_count_yearly, catfish_count_yearly, sturgeon_count_yearly, sucker_count_yearly)
+
+# Plot the combined data with separate panels for each group
+ggplot(combined_data, aes(x = Year, y = Total_Count)) +
+  geom_smooth(aes(color = Group)) +  # Add lines connecting the points
+  #geom_point(aes(color = Group)) +  # Add points
+  scale_x_continuous(breaks = unique(combined_data$Year)) +  # Specify x-axis breaks to be each year
+  facet_wrap(~ Group, scales = "free_y") +  # Create separate panels for each group
+  labs(title = "Population Over Time by Native Fish Group",
+       x = "Year",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+```
+
+
 Plotting native vs nonnative fish for each segment, CP, LLP, and ULP
 ```{r}
 create_segment_plot <- function(segment_data, title) {
@@ -1158,6 +1259,7 @@ siteInfo <- attr(temperatureAndFlow, "siteInfo")
 variableInfo <- attr(temperatureAndFlow, "variableInfo")
 siteInfo <- attr(temperatureAndFlow, "siteInfo")
 
+
 par(mar = c(5, 5, 5, 5)) # sets the size of the plot window
 
 plot(temperatureAndFlow$Date, temperatureAndFlow$Wtemp_Max,
@@ -1167,7 +1269,7 @@ plot(temperatureAndFlow$Date, temperatureAndFlow$Wtemp_Max,
   col = "black"
 )
 par(new = TRUE)
-plot(temperatureAndFlow$Date,
+temp_flow_plot <- plot(temperatureAndFlow$Date,
   temperatureAndFlow$Flow,
   col = "blue", type = "l",
   xaxt = "n", yaxt = "n",
@@ -1184,6 +1286,35 @@ legend("topleft",
        lty = c(NA, 1), # Only second item (flow) has a line type
        pch = c(1, NA)  # Only first item (temperature) has a point type
 )
+
+png("temp_flow_plot.png", width = 8, height = 6, units = "in", res = 300)
+par(mar = c(5, 5, 5, 5)) # sets the size of the plot window
+
+plot(temperatureAndFlow$Date, temperatureAndFlow$Wtemp_Max,
+  ylab = "Temperature (deg C)",
+  xlab = "",
+  pch = 1, # Sets the type of point
+  col = "black"
+)
+par(new = TRUE)
+temp_flow_plot <- plot(temperatureAndFlow$Date,
+  temperatureAndFlow$Flow,
+  col = "blue", type = "l",
+  xaxt = "n", yaxt = "n",
+  xlab = "", ylab = "",
+  axes = FALSE
+)
+axis(4, col = "blue", col.axis = "blue")
+mtext("Flow (ft3/s)", side = 4, line = 3, col = "blue")
+title(paste(siteInfo$station_nm, "2012"))
+
+legend("topleft", 
+       legend = c("Temp. (deg C)", "Flow (ft3/s)"), 
+       col = c("black", "blue"), 
+       lty = c(NA, 1), # Only second item (flow) has a line type
+       pch = c(1, NA)  # Only first item (temperature) has a point type
+)
+dev.off()
 ```
 
 ```{r}
@@ -1353,8 +1484,7 @@ print(paste("Percentage of fish collected using electrofishing methods:", round(
 species_names <- data.frame(SpeciesID = c(360, 120, 144, 178, 370, 212, 132, 862, 262, 44))
                             SpeciesName = c("Channel Catfish", "Red Shiner", "Sand Shiner", "Common Carp", "Flathead Catfish", "River Carpsucker", "River Shiner, Freshwater drum, Shorthead Redhorse", "Shortnose Gar")
 
-# Merge the species names with species_df
-species_df <- merge(species_df, species_names, by = "SpeciesID", all.x = TRUE)
+
 
 # Count the occurrences of each species ID
 species_counts <- table(platte_fish_cleaned$Species)
@@ -1362,6 +1492,9 @@ species_counts <- table(platte_fish_cleaned$Species)
 # Convert to a data frame
 species_df <- as.data.frame(species_counts, stringsAsFactors = FALSE)
 names(species_df) <- c("SpeciesID", "Count")
+
+# Merge the species names with species_df
+species_df <- merge(species_df, species_names, by = "SpeciesID", all.x = TRUE)
 
 # Sort the data frame by count in descending order
 species_df <- species_df[order(-species_df$Count), ]
@@ -1372,5 +1505,30 @@ species_df$Rank <- 1:nrow(species_df)
 # View the top species
 head(species_df)
 ```
-total_fish
+
+
+```{r}
+
+#ggsave("temp_flow_plot.png", temp_flow_plot, width = 8, height = 6)
+#ggsave("LLP_plot.png", LLP_plot, width = 8, height = 6)
+#ggsave("CP_plot.png", CP_plot, width = 8, height = 6)
+#ggsave("ULP_plot.png", ULP_plot, width = 8, height = 6)
+
+# Read the images
+img1 <- image_read("temp_flow_plot.png")
+img2 <- image_read("LLP_plot.png")
+img3 <- image_read("CP_plot.png")
+img4 <- image_read("ULP_plot.png")
+# Add others as needed
+
+# Combine images (adjust the layout as needed)
+combined_image <- image_montage(c(img1, img2, img3, img4), tile = "2x2")
+
+# Save the combined image
+image_write(combined_image, "combined_plots.png", format = "png")
+
+# Display the combined image in R Markdown
+include_graphics("combined_plots.png")
+```
+
 

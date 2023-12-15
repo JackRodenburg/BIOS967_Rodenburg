@@ -67,7 +67,7 @@ pallid_sturgeon <- platte_fish_cleaned %>%
 catfish <- platte_fish_cleaned %>%
   filter(Species %in% c(300,350,355,360,365,370))
 
-#separates just the invasive carp (grass carp 176, common carp 178, silver carp 180, "Unidentified Asian Carp" 181, Bidhead carp 182)
+#separates just the invasive carp (grass carp 176, common carp 178, silver carp 180, "Unidentified Asian Carp" 181, Bighead carp 182)
 carp <- platte_fish_cleaned %>%
   filter(Species %in% c(176,178,180,181,182))
 
